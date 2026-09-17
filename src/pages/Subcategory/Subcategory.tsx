@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useTranslation } from '../../hooks/useTranslation';
 import { getCategoriesTree, getProductsByCategory } from '../../api/catalog';
 import { CategoryTree, Product } from '../../types/supabase';
+import { trackViewItemList } from '../../api/analytics';
 
 const Subcategory: React.FC = () => {
   const { categoryId, subcategoryId } = useParams();
@@ -39,9 +40,18 @@ const Subcategory: React.FC = () => {
       getProductsByCategory(effectiveCategoryId, subcategoryId).then(data => {
         setProducts(data);
         setLoading(false);
+        trackViewItemList({
+          item_list_id: subcategoryId || effectiveCategoryId,
+          item_list_name: (subcategoryName || categoryName) as string,
+          items: data.map(p => ({
+            item_id: p.id,
+            item_name: language === 'zh-TW' ? p.name_zh : p.name_en,
+            item_category: p.category_id,
+          })),
+        });
       });
     }
-  }, [effectiveCategoryId, subcategoryId]);
+  }, [effectiveCategoryId, subcategoryId, language, categoryName, subcategoryName]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -129,14 +139,14 @@ const Subcategory: React.FC = () => {
 
         {totalPages > 1 && (
           <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginTop: '40px' }}>
-            <button 
+            <button
               onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
               style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: '4px', background: currentPage === 1 ? '#f5f5f5' : '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}
             >
               {t('btn_prev_page')}
             </button>
-            
+
             <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', justifyContent: 'center' }}>
               {Array.from({ length: totalPages }).map((_, i) => (
                 <button
@@ -156,7 +166,7 @@ const Subcategory: React.FC = () => {
               ))}
             </div>
 
-            <button 
+            <button
               onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
               disabled={currentPage === totalPages}
               style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: '4px', background: currentPage === totalPages ? '#f5f5f5' : '#fff', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}

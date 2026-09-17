@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState } from 'react';
 import zhTW from '../data/locales/zh-TW.json';
 import enUS from '../data/locales/en-US.json';
+import { trackChangeLanguage } from '../api/analytics';
 
 type Language = 'zh-TW' | 'en-US';
 type Translations = Record<string, string>;
@@ -18,7 +19,7 @@ interface I18nContextType {
 
 export const I18nContext = createContext<I18nContextType>({
   language: 'zh-TW',
-  setLanguage: () => {},
+  setLanguage: () => { },
   t: (key) => key,
 });
 
@@ -31,6 +32,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
     localStorage.setItem('app_lang', lang);
+    trackChangeLanguage(lang);
   };
 
   const t = (key: string): string => {
