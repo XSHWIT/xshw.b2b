@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer } from 'react';
+import { trackAddToCart, trackRemoveFromCart } from '../api/analytics';
 
 export interface CartItem {
   id: string;         // productId + spec (unique key)
@@ -83,12 +84,29 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, dispatch] = useReducer(cartReducer, { items: [] });
 
-  const addItem = (item: Omit<CartItem, 'checked'>) =>
+  const addItem = (item: Omit<CartItem, 'checked'>) => {
     dispatch({ type: 'ADD_ITEM', payload: item });
+    trackAddToCart({
+      item_id: item.id,
+      item_name: item.productName,
+      item_variant: item.spec,
+      quantity: item.qty,
+    });
+  };
   const updateQty = (id: string, qty: number) =>
     dispatch({ type: 'UPDATE_QTY', id, qty });
-  const removeItem = (id: string) =>
+  const removeItem = (id: string) => {
+    const removed = state.items.find(i => i.id === id);
     dispatch({ type: 'REMOVE_ITEM', id });
+    if (removed) {
+      trackRemoveFromCart({
+        item_id: removed.id,
+        item_name: removed.productName,
+        item_variant: removed.spec,
+        quantity: removed.qty,
+      });
+    }
+  };
   const toggleCheck = (id: string) =>
     dispatch({ type: 'TOGGLE_CHECK', id });
   const toggleAll = () =>

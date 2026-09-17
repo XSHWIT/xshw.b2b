@@ -5,6 +5,7 @@ import { fetchProductDetails } from '../../api/productApi';
 import { useCart } from '../../context/CartContext';
 import { ORDER_EMAIL } from '../../config/orderConfig';
 import { supabase } from '../../api/supabaseClient';
+import { trackViewItem } from '../../api/analytics';
 
 const Product: React.FC = () => {
   const { productId } = useParams();
@@ -34,9 +35,16 @@ const Product: React.FC = () => {
           setSelectedSpecIndex(0);
           setHasSelectedSpec(true); // Automatically select first spec
         }
+        if (data) {
+          trackViewItem({
+            item_id: data.id,
+            item_name: getI18nText(data.name, language),
+            item_category: data.categoryId,
+          });
+        }
       });
     }
-  }, [productId]);
+  }, [productId, language]);
 
   useEffect(() => {
     if (product && product.categoryId) {
@@ -99,7 +107,7 @@ const Product: React.FC = () => {
           {hasImage ? (
             <>
               <img src={currentImageUrl} alt={getI18nText(product.name, language)} referrerPolicy="no-referrer" />
-              
+
               {currentSpecImageUrls.length > 1 && (
                 <>
                   <button
@@ -126,7 +134,7 @@ const Product: React.FC = () => {
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
                   </button>
-                  
+
                   <div className="product-image-dots">
                     {currentSpecImageUrls.map((_, idx) => (
                       <span
@@ -296,7 +304,7 @@ const Product: React.FC = () => {
             <button className="lightbox-close" onClick={() => setIsLightboxOpen(false)} aria-label="Close">
               &times;
             </button>
-            
+
             {currentSpecImageUrls.length > 1 && (
               <>
                 <button
