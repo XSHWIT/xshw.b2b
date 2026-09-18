@@ -11,6 +11,11 @@ variables:
   GITHUB_OWNER: 'XSHWIT'
   GITHUB_REPO: 'xshw.b2b'
   SYNC_BRANCH: 'sync'
+  NODE_VERSION: '20.x'
+  # 打包輸出資料夾（Vite 預設）
+  BUILD_OUTPUT_DIR: 'dist'
+  # 注意：CLOUDFLARE_PAGES_PROJECT / CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN
+  # 統一改由 Azure DevOps Pipeline Variables (UI) 管理，此處不再重複宣告。
 
 steps:
 - checkout: self
@@ -132,3 +137,83 @@ steps:
           exit 1
         }
       }
+
+# ------------------------------------------------------------------
+# 建置專案並部署至 Cloudflare Pages
+# 需於 Pipeline Variables 建立以下 Secret（勾選 "Keep this value secret"）：
+#   - CLOUDFLARE_API_TOKEN   Cloudflare API Token（權限：Account -> Cloudflare Pages -> Edit）
+#   - CLOUDFLARE_ACCOUNT_ID  Cloudflare Account ID
+# ------------------------------------------------------------------
+- task: NodeTool@0
+  displayName: 'Install Node.js'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  inputs:
+    versionSpec: $(NODE_VERSION)
+
+- task: PowerShell@2
+  displayName: 'Install Dependencies & Build'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  inputs:
+    targetType: 'inline'
+    script: |
+      [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+      $ErrorActionPreference = "Stop"
+
+      Write-Host "安裝相依套件..."
+      if (Test-Path package-lock.json) {
+        npm ci
+      } else {
+        npm install
+      }
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      Write-Host "執行專案打包 (npm run build)..."
+      npm run build
+      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      if (-not (Test-Path "$(BUILD_OUTPUT_DIR)")) {
+        Write-Error "找不到打包輸出資料夾: $(BUILD_OUTPUT_DIR)"
+        exit 1
+      }
+      Write-Host "打包完成，輸出目錄: $(BUILD_OUTPUT_DIR)"
+
+- task: PowerShell@2
+  displayName: 'Deploy to Cloudflare Pages'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  env:
+    CLOUDFLARE_API_TOKEN: $(CLOUDFLARE_API_TOKEN)
+    CLOUDFLARE_ACCOUNT_ID: $(CLOUDFLARE_ACCOUNT_ID)
+  inputs:
+    targetType: 'inline'
+    script: |
+      [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+      $ErrorActionPreference = "Stop"
+
+      if (-not $env:CLOUDFLARE_API_TOKEN) {
+        Write-Error "找不到 CLOUDFLARE_API_TOKEN，請於 Pipeline Variables 中設定為 Secret。"
+        exit 1
+      }
+      if (-not $env:CLOUDFLARE_ACCOUNT_ID) {
+        Write-Error "找不到 CLOUDFLARE_ACCOUNT_ID，請於 Pipeline Variables 中設定。"
+        exit 1
+      }
+
+      $projectName = "$(CLOUDFLARE_PAGES_PROJECT)"
+      $outputDir   = "$(BUILD_OUTPUT_DIR)"
+      $branchName  = "$(Build.SourceBranchName)"
+
+      Write-Host "部署至 Cloudflare Pages：project=$projectName, branch=$branchName"
+
+      # 使用 npx 執行 wrangler，避免全域安裝造成 Agent 環境污染
+      npx --yes wrangler@latest pages deploy $outputDir `
+        --project-name=$projectName `
+        --branch=$branchName `
+        --commit-hash=$(Build.SourceVersion) `
+        --commit-message="Azure Pipeline Build $(Build.BuildId)"
+
+      if ($LASTEXITCODE -ne 0) {
+        Write-Error "Cloudflare Pages 部署失敗，結束碼: $LASTEXITCODE"
+        exit $LASTEXITCODE
+      }
+
+      Write-Host "Cloudflare Pages 部署完成。"
